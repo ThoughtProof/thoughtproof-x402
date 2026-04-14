@@ -22,11 +22,11 @@ describe("ThoughtProofClient", () => {
       json: async () => ({
         verdict: "APPROVE",
         confidence: 0.92,
-        reasoning: "Looks good",
-        verifiers: 3,
-        chainHash: "abc",
-        auditUrl: "https://thoughtproof.ai/chain/abc",
+        objections: [],
         durationMs: 100,
+        modelCount: 3,
+        mdi: 1,
+        verificationProfile: "fast",
       }),
     });
 
@@ -149,6 +149,27 @@ describe("ThoughtProofClient", () => {
     const result = await client.verify(mockContext);
 
     expect(result.verdict).toBe("UNCERTAIN");
+  });
+
+  it("maps objections array to reasoning string", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        verdict: "DENY",
+        confidence: 0.3,
+        objections: ["Claim is ungrounded", "Price seems inflated"],
+        modelCount: 2,
+        durationMs: 500,
+      }),
+    });
+
+    const client = new ThoughtProofClient();
+    const result = await client.verify(mockContext);
+
+    expect(result.verdict).toBe("DENY");
+    expect(result.reasoning).toBe("Claim is ungrounded; Price seems inflated");
+    expect(result.verifiers).toBe(2);
   });
 
   it("maps null verdict to UNCERTAIN", async () => {

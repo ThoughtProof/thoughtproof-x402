@@ -96,11 +96,21 @@ export class ThoughtProofClient {
         ? (rawVerdict as VerificationResult["verdict"])
         : "UNCERTAIN";
 
+      // Map API response fields to our interface.
+      // API returns: verdict, confidence, objections[], durationMs, verificationProfile, modelCount, mdi
+      // We normalize to a stable interface for middleware consumers.
+      const objections = Array.isArray(data.objections) ? data.objections : [];
+      const reasoning = typeof data.reasoning === "string"
+        ? data.reasoning
+        : objections.length > 0
+          ? objections.join("; ")
+          : "";
+
       return {
         verdict,
         confidence: typeof data.confidence === "number" ? data.confidence : 0,
-        reasoning: typeof data.reasoning === "string" ? data.reasoning : "",
-        verifiers: typeof data.verifiers === "number" ? data.verifiers : 0,
+        reasoning,
+        verifiers: typeof data.modelCount === "number" ? data.modelCount : (typeof data.verifiers === "number" ? data.verifiers : 0),
         chainHash: typeof data.chainHash === "string" ? data.chainHash : "",
         auditUrl: typeof data.auditUrl === "string" ? data.auditUrl : "",
         durationMs: typeof data.durationMs === "number" ? data.durationMs : 0,
