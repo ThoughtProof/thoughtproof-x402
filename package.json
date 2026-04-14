@@ -1,0 +1,62 @@
+{
+  "name": "thoughtproof-x402",
+  "version": "1.0.0",
+  "description": "Pre-settlement reasoning verification for x402 agent payments. Verifies AI agent decision quality before payment executes.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./express": {
+      "types": "./dist/middleware/express.d.ts",
+      "import": "./dist/middleware/express.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "x402",
+    "thoughtproof",
+    "ai-agents",
+    "verification",
+    "reasoning",
+    "middleware",
+    "payments",
+    "pre-settlement",
+    "epistemic"
+  ],
+  "author": "ThoughtProof <hello@thoughtproof.ai>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ThoughtProof/thoughtproof-x402"
+  },
+  "homepage": "https://thoughtproof.ai",
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "peerDependencies": {
+    "express": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    }
+  }
+}
