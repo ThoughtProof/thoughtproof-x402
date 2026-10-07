@@ -31,7 +31,7 @@ import type { Request, Response, NextFunction } from "express";
 import { ThoughtProofClient } from "../client.js";
 import { buildAttestationHeaders } from "../headers.js";
 import { shouldAllow, shouldSkipRoute } from "../verify.js";
-import { extractAgentAddress, extractAmount, extractNetwork, normalizeHeaders } from "./helpers.js";
+import { paymentContext, normalizeHeaders } from "./helpers.js";
 import type {
   VerifyPaymentOptions,
   AgentContext,
@@ -51,12 +51,14 @@ export function thoughtproofMiddleware(options: VerifyPaymentOptions) {
   const confidenceThreshold = options.thoughtproof.confidenceThreshold ?? 0.7;
 
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    // Skip non-payment requests (no x402 payment header)
-    const paymentHeader = req.headers["x-payment"] ?? req.headers["payment"];
-    if (!paymentHeader) {
-      next();
+    let payment: Partial<AgentContext> | null;
+    try {
+      payment = paymentContext(normalizeHeaders(req.headers), options.allowV1);
+    } catch {
+      res.status(400).json({ error: "invalid_payment", message: "Invalid or unsupported x402 payment header" });
       return;
     }
+    if (payment === null) { next(); return; }
 
     // Skip routes excluded by policy
     if (shouldSkipRoute(req.path, policy)) {
@@ -70,9 +72,7 @@ export function thoughtproofMiddleware(options: VerifyPaymentOptions) {
       method: req.method,
       body: req.body,
       headers: normalizeHeaders(req.headers),
-      agentAddress: extractAgentAddress(paymentHeader as string),
-      amount: extractAmount(req),
-      network: extractNetwork(req),
+      ...payment,
     };
 
     // Pre-verify hook

@@ -23,13 +23,12 @@ app.use(
   thoughtproofMiddleware({
     thoughtproof: {
       apiKey: process.env.THOUGHTPROOF_KEY,
-      tier: "fast", // fast ($0.008) | standard ($0.02) | deep ($0.08)
+      tier: "standard", // checkpoint | standard
       confidenceThreshold: 0.7,
       timeout: 10_000,
     },
     policy: {
-      minAmount: 0.01, // Skip verification for payments under $0.01
-      maxAmount: 1000, // Auto-deny payments over $1000
+      // Atomic token amounts need explicit trusted valuation in a custom decide policy.
       onUncertain: "deny", // Deny uncertain verdicts
       onError: "allow", // Allow if ThoughtProof is unreachable
       skipRoutes: ["/health", "/metrics"],

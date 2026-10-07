@@ -6,10 +6,13 @@
 export type Verdict = "APPROVE" | "DENY" | "UNCERTAIN";
 
 /** Verification tier — controls depth and cost */
-export type VerificationTier = "fast" | "standard" | "deep";
+export type VerificationTier = "checkpoint" | "standard";
 
 /** ThoughtProof verification result */
 export interface VerificationResult {
+  /** Sentinel verification receipt ID, distinct from any cryptographic hash. */
+  id?: string;
+  objections?: Record<string, unknown>[];
   /** Pass/fail/uncertain verdict */
   verdict: Verdict;
   /** Confidence score 0-1 */
@@ -28,13 +31,18 @@ export interface VerificationResult {
 
 /** Agent context extracted from x402 payment request */
 export interface AgentContext {
+  paymentVersion?: 1 | 2;
+  amountUnit?: "atomic" | "usd";
+  recipient?: string;
+  /** Trusted application-provided supporting evidence. */
+  evidence?: string;
   /** The agent's wallet address (from payment signature) */
   agentAddress?: string;
   /** The resource being requested */
   resource: string;
   /** HTTP method */
   method: string;
-  /** Payment amount in human-readable format (e.g. "$0.01") */
+  /** Payment amount; decoded x402 amounts are atomic token units (see amountUnit) */
   amount?: string;
   /** Payment token address */
   token?: string;
@@ -48,11 +56,11 @@ export interface AgentContext {
 
 /** Configuration for the ThoughtProof verification client */
 export interface ThoughtProofConfig {
-  /** ThoughtProof API endpoint (default: https://api.thoughtproof.ai) */
+  /** ThoughtProof API endpoint (default: https://sentinel.thoughtproof.ai) */
   apiUrl?: string;
-  /** API key for ThoughtProof (optional — x402 payment also accepted) */
+  /** Sentinel API key. This client does not fund backend x402 challenges. */
   apiKey?: string;
-  /** Verification tier (default: "fast") */
+  /** Verification tier (default: "standard") */
   tier?: VerificationTier;
   /** Minimum confidence threshold to APPROVE (default: 0.7) */
   confidenceThreshold?: number;
@@ -80,6 +88,8 @@ export interface VerificationPolicy {
 
 /** Full middleware options */
 export interface VerifyPaymentOptions {
+  /** Explicit legacy X-PAYMENT/payment compatibility. Default false. */
+  allowV1?: boolean;
   /** ThoughtProof client configuration */
   thoughtproof: ThoughtProofConfig;
   /** Verification policy */

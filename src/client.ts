@@ -12,9 +12,9 @@ import type {
   AgentContext,
 } from "./types/index.js";
 
-const DEFAULT_API_URL = "https://api.thoughtproof.ai";
+const DEFAULT_API_URL = "https://sentinel.thoughtproof.ai";
 const DEFAULT_TIMEOUT = 10_000;
-const DEFAULT_TIER: VerificationTier = "fast";
+const DEFAULT_TIER: VerificationTier = "standard";
 
 export class ThoughtProofClient {
   private readonly apiUrl: string;
@@ -26,6 +26,7 @@ export class ThoughtProofClient {
     this.apiUrl = (config.apiUrl ?? DEFAULT_API_URL).replace(/\/$/, "");
     this.apiKey = config.apiKey;
     this.tier = config.tier ?? DEFAULT_TIER;
+    if (!["checkpoint", "standard"].includes(this.tier)) throw new Error("Unsupported Sentinel tier");
     this.timeout = config.timeout ?? DEFAULT_TIMEOUT;
   }
 
@@ -46,42 +47,29 @@ export class ThoughtProofClient {
       };
 
       if (this.apiKey) {
-        headers["X-API-Key"] = this.apiKey;
+        headers["X-Sentinel-Key"] = this.apiKey;
       }
 
       const payload = {
         claim: buildClaim(context),
         tier: this.tier,
-        context: {
+        mode: "action_authorization",
+        evidence: JSON.stringify({
           source: "x402-middleware",
-          agent: context.agentAddress,
-          resource: context.resource,
-          method: context.method,
-          amount: context.amount,
-          network: context.network,
-        },
+          supportingEvidence: context.evidence ?? "No independent supporting evidence supplied.",
+          // These fields are unverified client declarations, not a principal mandate.
+          clientDeclared: { agent: context.agentAddress, resource: context.resource,
+            method: context.method, amount: context.amount, amountUnit: context.amountUnit,
+            network: context.network, asset: context.token, recipient: context.recipient, body: context.body },
+        }),
       };
 
-      const response = await fetch(`${this.apiUrl}/v1/check`, {
+      const response = await fetch(`${this.apiUrl}/sentinel/verify`, {
         method: "POST",
         headers,
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
-
-      if (response.status === 402) {
-        // ThoughtProof itself requires payment — pass through
-        // This shouldn't happen if apiKey is set
-        return {
-          verdict: "UNCERTAIN",
-          confidence: 0,
-          reasoning: "ThoughtProof API requires payment — set an API key or fund the x402 payment.",
-          verifiers: 0,
-          chainHash: "",
-          auditUrl: "",
-          durationMs: 0,
-        };
-      }
 
       if (!response.ok) {
         const text = await response.text().catch(() => "unknown error");
@@ -90,30 +78,23 @@ export class ThoughtProofClient {
 
       const data = await response.json() as Record<string, unknown>;
 
-      const rawVerdict = typeof data.verdict === "string" ? data.verdict.toUpperCase() : "";
-      const validVerdicts = new Set(["APPROVE", "DENY", "UNCERTAIN"]);
-      const verdict: VerificationResult["verdict"] = validVerdicts.has(rawVerdict)
-        ? (rawVerdict as VerificationResult["verdict"])
-        : "UNCERTAIN";
-
-      // Map API response fields to our interface.
-      // API returns: verdict, confidence, objections[], durationMs, verificationProfile, modelCount, mdi
-      // We normalize to a stable interface for middleware consumers.
-      const objections = Array.isArray(data.objections) ? data.objections : [];
-      const reasoning = typeof data.reasoning === "string"
-        ? data.reasoning
-        : objections.length > 0
-          ? objections.join("; ")
-          : "";
-
+      const verdict: VerificationResult["verdict"] = data.verdict === "ALLOW" ? "APPROVE"
+        : data.verdict === "BLOCK" ? "DENY" : "UNCERTAIN";
+      const meta = data.meta && typeof data.meta === "object" ? data.meta as Record<string, unknown> : {};
+      const objections = Array.isArray(data.objections)
+        ? data.objections.filter((o): o is Record<string, unknown> => !!o && typeof o === "object" && !Array.isArray(o)) : [];
       return {
+        id: typeof data.id === "string" ? data.id : undefined,
         verdict,
-        confidence: typeof data.confidence === "number" ? data.confidence : 0,
-        reasoning,
-        verifiers: typeof data.modelCount === "number" ? data.modelCount : (typeof data.verifiers === "number" ? data.verifiers : 0),
-        chainHash: typeof data.chainHash === "string" ? data.chainHash : "",
-        auditUrl: typeof data.auditUrl === "string" ? data.auditUrl : "",
-        durationMs: typeof data.durationMs === "number" ? data.durationMs : 0,
+        confidence: typeof data.confidence === "number" && Number.isFinite(data.confidence) && data.confidence >= 0 && data.confidence <= 1 ? data.confidence : 0,
+        reasoning: typeof data.reasoning === "string" ? data.reasoning
+          : objections.map(o => typeof o.reasoning === "string" ? o.reasoning : "").filter(Boolean).join("; "),
+        objections,
+        verifiers: Array.isArray(meta.models_used) ? meta.models_used.length : 0,
+        // OpenAPI does not promise a chain hash or audit URL; never fabricate them from id.
+        chainHash: "",
+        auditUrl: "",
+        durationMs: typeof meta.duration_ms === "number" ? meta.duration_ms : 0,
       };
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
