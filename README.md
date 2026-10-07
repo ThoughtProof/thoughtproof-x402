@@ -78,6 +78,14 @@ export default {
 4. If **APPROVE** (confidence ≥ threshold): adds attestation headers, continues to x402
 5. If **DENY** or **UNCERTAIN**: returns 403 with verification details
 
+## Migrating from 1.0.0
+
+1.0.0 treated legacy `X-PAYMENT` as the default request header and called `POST /v1/check`. 2.0.0 does not.
+
+- Send an x402 v2 Base64 `PAYMENT-SIGNATURE`. Amount and network are read from that payload (`accepted.amount`, `accepted.network`). Set top-level `allowV1: true` only if you still accept v1 `X-PAYMENT` / `payment`.
+- Call Sentinel at `POST /sentinel/verify`. Tiers are `checkpoint` or `standard` (default `standard`). `fast` and `deep` are rejected. The API key is sent as `X-Sentinel-Key`.
+- A Sentinel HTTP 402 always denies (`allowed: false`, verdict `DENY`) on both Express and standalone, including when `onError` is `"allow"`. The client does not pay that challenge.
+
 ## Protocol and Sentinel migration
 
 The default path is x402 v2. Both adapters decode Base64 UTF-8 JSON, read
