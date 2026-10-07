@@ -36,7 +36,8 @@
  * ```
  */
 
-import { ThoughtProofClient } from "../client.js";
+import { paymentContext } from "./helpers.js";
+import { SentinelPaymentRequiredError, ThoughtProofClient, sentinelPaymentRequiredResult } from "../client.js";
 import { buildAttestationHeaders } from "../headers.js";
 import { shouldAllow, shouldSkipRoute } from "../verify.js";
 import type {
@@ -74,11 +75,17 @@ export async function verifyPayment(
   // Build context from Request or use directly
   const context: AgentContext = isRequest(request)
     ? await contextFromRequest(request)
-    : request;
+    : { ...request };
 
-  // Skip if no payment signal
-  if (!hasPaymentSignal(context)) {
-    return { allowed: true, result: null, headers: {}, skipped: true };
+  try {
+    const payment = paymentContext(context.headers ?? {}, options.allowV1);
+    if (payment === null) return { allowed: true, result: null, headers: {}, skipped: true };
+    Object.assign(context, payment);
+  } catch {
+    return { allowed: false, skipped: false, headers: {}, result: {
+      verdict: "DENY", confidence: 0, reasoning: "Invalid or unsupported x402 payment header",
+      verifiers: 0, chainHash: "", auditUrl: "", durationMs: 0,
+    } };
   }
 
   // Skip excluded routes
@@ -100,6 +107,14 @@ export async function verifyPayment(
   try {
     result = await client.verify(context);
   } catch (error) {
+    if (error instanceof SentinelPaymentRequiredError) {
+      const denied = sentinelPaymentRequiredResult(error);
+      if (options.onDeny) {
+        await options.onDeny(denied, context);
+      }
+      return { allowed: false, result: denied, headers: {}, skipped: false };
+    }
+
     if (policy.onError === "deny") {
       return {
         allowed: false,
@@ -170,30 +185,5 @@ async function contextFromRequest(request: Request): Promise<AgentContext> {
     method: request.method,
     body,
     headers,
-    agentAddress: extractAgentFromHeaders(headers),
   };
-}
-
-function hasPaymentSignal(context: AgentContext): boolean {
-  if (!context.headers) return false;
-  return !!(
-    context.headers["x-payment"] ??
-    context.headers["payment"] ??
-    context.headers["X-Payment"] ??
-    context.headers["Payment"]
-  );
-}
-
-function extractAgentFromHeaders(headers: Record<string, string>): string | undefined {
-  // x402 payment header contains signed payment — extract signer address
-  // This is a simplification; real implementation would verify the signature
-  const payment = headers["x-payment"] ?? headers["payment"];
-  if (!payment) return undefined;
-
-  try {
-    const parsed = JSON.parse(payment);
-    return parsed.from ?? parsed.signer ?? parsed.address;
-  } catch {
-    return undefined;
-  }
 }

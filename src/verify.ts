@@ -30,6 +30,10 @@ export async function shouldAllow(
   }
 
   // Check amount limits
+  if (context.amountUnit === "atomic" && (policy.minAmount !== undefined || policy.maxAmount !== undefined)) {
+    // A token amount is not a USD valuation. Require an explicit custom decide policy.
+    return false;
+  }
   if (context.amount) {
     const usdAmount = parseAmount(context.amount);
     if (policy.maxAmount !== undefined && usdAmount > policy.maxAmount) {

@@ -31,7 +31,7 @@
  */
 
 // Core client
-export { ThoughtProofClient } from "./client.js";
+export { SentinelPaymentRequiredError, ThoughtProofClient } from "./client.js";
 
 // Standalone verification (framework-agnostic)
 export { verifyPayment } from "./middleware/standalone.js";

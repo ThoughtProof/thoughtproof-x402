@@ -20,7 +20,7 @@ export default {
     const verification = await verifyPayment(request, {
       thoughtproof: {
         apiKey: env.THOUGHTPROOF_KEY,
-        tier: "fast",
+        tier: "standard",
         confidenceThreshold: 0.7,
       },
       policy: {
