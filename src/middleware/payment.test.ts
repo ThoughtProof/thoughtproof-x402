@@ -4,6 +4,7 @@ import { verifyPayment } from "./standalone.js";
 import { thoughtproofMiddleware } from "./express.js";
 import { shouldAllow } from "../verify.js";
 import type { Request, Response, NextFunction } from "express";
+import type { VerificationPolicy } from "../types/index.js";
 
 const v2 = { x402Version: 2, accepted: { scheme: "exact", network: "eip155:8453", amount: "10000", asset: "USDC-address", payTo: "0xrecipient", maxTimeoutSeconds: 60 }, payload: { authorization: { from: "0xpayer", value: "10000" }, signature: "0xsig" }, resource: { url: "https://example.com/ä" } };
 const v1 = { x402Version: 1, scheme: "exact", network: "base", payload: { authorization: { from: "0xlegacy", to: "0xrecipient", value: "10000" } } };
@@ -75,6 +76,43 @@ describe.each(["standalone", "express"])("%s middleware", adapter => {
     const fetch = mockSentinel();
     expect((await run({})).skipped).toBe(true);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each<VerificationPolicy | undefined>([
+    undefined,
+    { onError: "allow" },
+    { onError: "deny" },
+    { onError: "allow", onUncertain: "allow", decide: () => true },
+  ])("fail-closes a Sentinel HTTP 402 regardless of onError (%j)", async (policy) => {
+    const fetch = vi.fn().mockResolvedValue(new Response("Payment required", { status: 402 }));
+    vi.stubGlobal("fetch", fetch);
+    const headers = { "payment-signature": encode(v2) };
+
+    if (adapter === "standalone") {
+      const outcome = await verifyPayment(new Request("https://example.com/data", { headers }), { ...options, policy });
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(outcome.allowed).toBe(false);
+      expect(outcome.skipped).toBe(false);
+      expect(outcome.result?.verdict).toBe("DENY");
+      expect(outcome.headers).toEqual({});
+      return;
+    }
+
+    const next = vi.fn();
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn(), setHeader: vi.fn() };
+    await thoughtproofMiddleware({ ...options, policy })(
+      { headers, path: "/data", method: "GET", protocol: "https", get: () => "example.com", originalUrl: "/data" } as unknown as Request,
+      res as unknown as Response,
+      next as NextFunction,
+    );
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(next).not.toHaveBeenCalled();
+    expect(res.setHeader).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      error: "verification_denied",
+      verdict: "DENY",
+    }));
   });
 });
 

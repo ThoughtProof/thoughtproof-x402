@@ -37,7 +37,7 @@
  */
 
 import { paymentContext } from "./helpers.js";
-import { ThoughtProofClient } from "../client.js";
+import { SentinelPaymentRequiredError, ThoughtProofClient, sentinelPaymentRequiredResult } from "../client.js";
 import { buildAttestationHeaders } from "../headers.js";
 import { shouldAllow, shouldSkipRoute } from "../verify.js";
 import type {
@@ -107,6 +107,14 @@ export async function verifyPayment(
   try {
     result = await client.verify(context);
   } catch (error) {
+    if (error instanceof SentinelPaymentRequiredError) {
+      const denied = sentinelPaymentRequiredResult(error);
+      if (options.onDeny) {
+        await options.onDeny(denied, context);
+      }
+      return { allowed: false, result: denied, headers: {}, skipped: false };
+    }
+
     if (policy.onError === "deny") {
       return {
         allowed: false,

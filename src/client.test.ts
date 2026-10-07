@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ThoughtProofClient } from "./client.js";
+import { SentinelPaymentRequiredError, ThoughtProofClient } from "./client.js";
 import type { AgentContext } from "./types/index.js";
 
 const mockContext: AgentContext = {
@@ -77,6 +77,7 @@ describe("ThoughtProofClient", () => {
     });
 
     const client = new ThoughtProofClient();
+    await expect(client.verify(mockContext)).rejects.toBeInstanceOf(SentinelPaymentRequiredError);
     await expect(client.verify(mockContext)).rejects.toThrow("ThoughtProof API error 402");
   });
 

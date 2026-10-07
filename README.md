@@ -105,9 +105,12 @@ Sentinel `ALLOW` maps to public `APPROVE`, `BLOCK` to `DENY`, and `UNCERTAIN` st
 `UNCERTAIN`. Results preserve `id` and structured `objections`; model count and
 duration come from `meta.models_used` and `meta.duration_ms`.
 
-Backend HTTP errors (including 401, 402, 429, 503) follow `policy.onError`, whose
-existing default is `"allow"`. Set `onError: "deny"` when verification is mandatory.
-The client does not pay Sentinel's own x402 challenge using the incoming payment.
+Backend HTTP errors other than 402 (including 401, 429, and 503) follow
+`policy.onError`, whose existing default is `"allow"`. Set `onError: "deny"` when
+verification is mandatory. A Sentinel HTTP 402 is always fail-closed: both adapters
+deny the request (`allowed: false`, verdict `DENY`) and never resolve it as allowed,
+regardless of `onError`. The client does not pay Sentinel's own x402 challenge
+using the incoming payment.
 
 USD `minAmount` / `maxAmount` cannot value arbitrary atomic tokens. With decoded
 payments these policies deny unless a custom `decide` function explicitly handles
@@ -164,7 +167,7 @@ console.log(proof?.auditUrl);   // Empty unless supplied by another integration
 | `skipRoutes` | `[]` | Glob patterns to skip (e.g., `"/health"`, `"/api/*/public"`) |
 | `requireRoutes` | `[]` | Only verify these routes (takes precedence) |
 | `onUncertain` | `"deny"` | Action on UNCERTAIN: `"allow"` or `"deny"` |
-| `onError` | `"allow"` | Action on timeout/error: `"allow"` or `"deny"` |
+| `onError` | `"allow"` | Action on timeout/error: `"allow"` or `"deny"`. A Sentinel HTTP 402 always denies. |
 | `decide` | — | Custom function: `(result, context) => boolean` |
 
 ### Lifecycle Hooks

@@ -16,6 +16,29 @@ const DEFAULT_API_URL = "https://sentinel.thoughtproof.ai";
 const DEFAULT_TIMEOUT = 10_000;
 const DEFAULT_TIER: VerificationTier = "standard";
 
+/** Sentinel answered 402. Callers must fail closed; this is not an onError case. */
+export class SentinelPaymentRequiredError extends Error {
+  readonly status = 402 as const;
+
+  constructor(detail: string) {
+    super(`ThoughtProof API error 402: ${detail}`);
+    this.name = "SentinelPaymentRequiredError";
+  }
+}
+
+/** Denial produced when Sentinel demands payment. Never an allow. */
+export function sentinelPaymentRequiredResult(error: SentinelPaymentRequiredError): VerificationResult {
+  return {
+    verdict: "DENY",
+    confidence: 0,
+    reasoning: error.message,
+    verifiers: 0,
+    chainHash: "",
+    auditUrl: "",
+    durationMs: 0,
+  };
+}
+
 export class ThoughtProofClient {
   private readonly apiUrl: string;
   private readonly apiKey?: string;
@@ -70,6 +93,11 @@ export class ThoughtProofClient {
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
+
+      if (response.status === 402) {
+        const text = await response.text().catch(() => "unknown error");
+        throw new SentinelPaymentRequiredError(text);
+      }
 
       if (!response.ok) {
         const text = await response.text().catch(() => "unknown error");

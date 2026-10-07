@@ -80,7 +80,7 @@ export interface VerificationPolicy {
   requireRoutes?: string[];
   /** Action on UNCERTAIN verdict: "allow" | "deny" (default: "deny") */
   onUncertain?: "allow" | "deny";
-  /** Action on verification timeout/error: "allow" | "deny" (default: "allow") */
+  /** Action on verification timeout/error: "allow" | "deny" (default: "allow"). Sentinel HTTP 402 always denies. */
   onError?: "allow" | "deny";
   /** Custom decision function — overrides default policy */
   decide?: (result: VerificationResult, context: AgentContext) => boolean | Promise<boolean>;

@@ -28,7 +28,7 @@
  */
 
 import type { Request, Response, NextFunction } from "express";
-import { ThoughtProofClient } from "../client.js";
+import { SentinelPaymentRequiredError, ThoughtProofClient, sentinelPaymentRequiredResult } from "../client.js";
 import { buildAttestationHeaders } from "../headers.js";
 import { shouldAllow, shouldSkipRoute } from "../verify.js";
 import { paymentContext, normalizeHeaders } from "./helpers.js";
@@ -89,6 +89,24 @@ export function thoughtproofMiddleware(options: VerifyPaymentOptions) {
     try {
       result = await client.verify(context);
     } catch (error) {
+      // Sentinel's own 402 is unpaid verification, not a transient outage.
+      // Fail closed even when onError is "allow".
+      if (error instanceof SentinelPaymentRequiredError) {
+        result = sentinelPaymentRequiredResult(error);
+        if (options.onDeny) {
+          await options.onDeny(result, context);
+        }
+        res.status(403).json({
+          error: "verification_denied",
+          verdict: result.verdict,
+          confidence: result.confidence,
+          reasoning: result.reasoning,
+          auditUrl: result.auditUrl,
+          chainHash: result.chainHash,
+        });
+        return;
+      }
+
       // Verification failed — apply error policy
       if (policy.onError === "deny") {
         res.status(403).json({
